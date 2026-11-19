@@ -34,7 +34,14 @@ from mergin.client_pull import (
     download_project_is_running,
 )
 from mergin.client_pull import pull_project_async, pull_project_is_running, pull_project_finalize, pull_project_cancel
-from mergin.client_push import push_project_async, push_project_is_running, push_project_finalize, push_project_cancel
+from mergin.client_push import (
+    get_push_changes_batch,
+    push_project_async,
+    push_project_is_running,
+    push_project_finalize,
+    push_project_cancel,
+)
+from mergin.common import MAX_UPLOAD_CHANGES
 
 
 from pygeodiff import GeoDiff
@@ -443,7 +450,6 @@ def push(ctx):
                     bar.update(new_transferred_size - last_transferred_size)  # the update() needs increment only
                     last_transferred_size = new_transferred_size
             push_project_finalize(job)
-        click.echo("Done")
     except InvalidProject as e:
         click.secho("Invalid project directory ({})".format(str(e)), fg="red")
     except ClientError as e:
@@ -454,6 +460,24 @@ def push(ctx):
         push_project_cancel(job)
     except Exception as e:
         _print_unhandled_exception()
+    else:
+        remaining_changes = 0
+        if job is not None:
+            # push uploads at most MAX_UPLOAD_CHANGES changes, so check whether any are left.
+            # The push is already complete, so a failed or interrupted check only skips the warning.
+            try:
+                _, remaining_changes = get_push_changes_batch(mc, directory)
+            except (Exception, KeyboardInterrupt):
+                pass
+        if remaining_changes:
+            click.secho(
+                f"Done, but {remaining_changes} local changes were not uploaded "
+                f"(push sends at most {MAX_UPLOAD_CHANGES} changes at a time, MAX_UPLOAD_CHANGES). "
+                "Run 'mergin sync' to upload them all, or push again.",
+                fg="yellow",
+            )
+        else:
+            click.echo("Done")
 
 
 @cli.command()
