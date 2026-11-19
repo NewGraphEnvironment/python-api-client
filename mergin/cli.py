@@ -472,7 +472,7 @@ def push(ctx):
         if remaining_changes:
             click.secho(
                 f"Done, but {remaining_changes} local changes were not uploaded "
-                f"(push sends at most {MAX_UPLOAD_CHANGES} changes at a time, MAX_UPLOAD_CHANGES). "
+                f"(push sends at most {MAX_UPLOAD_CHANGES} changes at a time). "
                 "Run 'mergin sync' to upload them all, or push again.",
                 fg="yellow",
             )

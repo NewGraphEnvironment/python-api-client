@@ -57,9 +57,11 @@ def test_push_reports_remaining_changes(tmp_path, monkeypatch, files_count, expe
 
     assert result.exit_code == 0
     if expected_remaining:
-        assert f"Done, but {expected_remaining} local changes were not uploaded" in result.output
-        assert f"at most {MAX_UPLOAD_CHANGES} changes" in result.output
-        assert "mergin sync" in result.output
+        assert (
+            f"Done, but {expected_remaining} local changes were not uploaded "
+            f"(push sends at most {MAX_UPLOAD_CHANGES} changes at a time). "
+            "Run 'mergin sync' to upload them all, or push again."
+        ) in result.output
     else:
         assert result.output.strip().endswith("Done")
         assert "not uploaded" not in result.output
