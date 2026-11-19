@@ -19,30 +19,41 @@ PROJECT_METADATA = {
 }
 
 
-def _create_local_project(directory, files_count):
-    """Create a local project with no files on the server and files_count new local files."""
+def _create_local_project(directory, files_count, updated_count=0):
+    """Create a local project with files_count new local files and updated_count files that
+    are on the server but modified locally."""
     MerginProject.write_metadata(str(directory), PROJECT_METADATA)
+    for i in range(updated_count):
+        (directory / f"server_{i}.txt").write_text(f"server content {i}")
+    mp = MerginProject(str(directory))
+    server_files = [{"path": f["path"], "checksum": f["checksum"], "size": f["size"]} for f in mp.inspect_files()]
+    mp.update_metadata({**PROJECT_METADATA, "files": server_files})
+    for i in range(updated_count):
+        (directory / f"server_{i}.txt").write_text(f"local content {i}")
     for i in range(files_count):
         (directory / f"file_{i}.txt").write_text(f"content {i}")
 
 
 def _finalize_first_batch(job):
-    """Mock of push_project_finalize: mark only the first MAX_UPLOAD_CHANGES files as uploaded."""
+    """Mock of push_project_finalize: mark only the first MAX_UPLOAD_CHANGES new files as uploaded,
+    as push does when there are more than MAX_UPLOAD_CHANGES added files."""
     mp = MerginProject(os.getcwd())
-    local_files = sorted(mp.inspect_files(), key=lambda f: f["path"])[:MAX_UPLOAD_CHANGES]
-    uploaded = [{"path": f["path"], "checksum": f["checksum"], "size": f["size"]} for f in local_files]
-    mp.update_metadata({**PROJECT_METADATA, "version": "v2", "files": uploaded})
+    new_files = sorted((f for f in mp.inspect_files() if f["path"].startswith("file_")), key=lambda f: f["path"])
+    uploaded = [{"path": f["path"], "checksum": f["checksum"], "size": f["size"]} for f in new_files]
+    mp.update_metadata({**PROJECT_METADATA, "version": "v2", "files": mp.files() + uploaded[:MAX_UPLOAD_CHANGES]})
 
 
 @pytest.mark.parametrize(
-    "files_count, expected_remaining",
+    "files_count, updated_count, expected_remaining",
     [
-        (MAX_UPLOAD_CHANGES + 50, 50),
-        (MAX_UPLOAD_CHANGES, 0),
+        (MAX_UPLOAD_CHANGES + 50, 0, 50),
+        (MAX_UPLOAD_CHANGES, 0, 0),
+        # more than MAX_UPLOAD_CHANGES left, including updated files that push left out of the batch
+        (MAX_UPLOAD_CHANGES * 2, 10, MAX_UPLOAD_CHANGES + 10),
     ],
 )
-def test_push_reports_remaining_changes(tmp_path, monkeypatch, files_count, expected_remaining):
-    _create_local_project(tmp_path, files_count)
+def test_push_reports_remaining_changes(tmp_path, monkeypatch, files_count, updated_count, expected_remaining):
+    _create_local_project(tmp_path, files_count, updated_count)
     monkeypatch.chdir(tmp_path)
     mc = MagicMock()
     mc.has_editor_support.return_value = False
